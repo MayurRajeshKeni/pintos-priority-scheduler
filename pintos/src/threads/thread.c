@@ -355,20 +355,48 @@ thread_foreach (thread_action_func *func, void *aux)
       func (t, aux);
     }
 }
+/* Recompute T's priority from its base priority and the waiters on the locks it holds. */
+void
+thread_update_priority (struct thread *t)
+{
+  int p = t->base_priority;
+  struct list_elem *e, *w;
+  for (e = list_begin (&t->locks_held); e != list_end (&t->locks_held); e = list_next (e))
+    {
+      struct lock *l = list_entry (e, struct lock, elem);
+      for (w = list_begin (&l->semaphore.waiters); w != list_end (&l->semaphore.waiters); w = list_next (w))
+        {
+          struct thread *waiter = list_entry (w, struct thread, elem);
+          if (waiter->priority > p)
+            p = waiter->priority;
+        }
+    }
+  thread_set_effective_priority (t, p);
+}
 
+/* Set T's priority and keep ready_list sorted if T is in it. */
+void
+thread_set_effective_priority (struct thread *t, int p)
+{
+  t->priority = p;
+  if (t->status == THREAD_READY)
+    {
+      list_remove (&t->elem);
+      list_insert_ordered (&ready_list, &t->elem, thread_cmp_priority, NULL);
+    }
+}
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
-thread_set_priority (int new_priority) 
+thread_set_priority (int new_priority)
 {
-  thread_current ()->priority = new_priority;
-
-  /* [Mayur] Preempt if new priority is lower than highest ready thread. */
-  if (!list_empty (&ready_list))
-    {
-      struct thread *front = list_entry (list_begin (&ready_list), struct thread, elem);
-      if (new_priority < front->priority)
-        thread_yield ();
-    }
+  enum intr_level old = intr_disable ();
+  struct thread *cur = thread_current ();
+  cur->base_priority = new_priority;
+  thread_update_priority (cur);
+  if (!list_empty (&ready_list) &&
+      list_entry (list_begin (&ready_list), struct thread, elem)->priority > cur->priority)
+    thread_yield ();
+  intr_set_level (old);
 }
 
 /* Returns the current thread's priority. */
@@ -495,6 +523,9 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->base_priority = priority;
+  t->lock_waiting_on = NULL;
+  list_init (&t->locks_held);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
