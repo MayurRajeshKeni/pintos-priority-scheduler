@@ -201,13 +201,14 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  /* [Mayur] Preempt current thread if the newly created thread has higher priority. */
   if (t->priority > thread_current ()->priority)
     thread_yield ();
 
   return tid;
 }
 
-/* Compares the priority of two threads corresponding to list elements A and B.
+/* [Mayur] Compares the priority of two threads corresponding to list elements A and B.
    Returns true if thread A has a higher priority than thread B. */
 bool
 thread_cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
@@ -250,10 +251,12 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
+  /* [Mayur] Insert thread into ready_list ordered by priority. */
   list_insert_ordered (&ready_list, &t->elem, thread_cmp_priority, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 
+  /* [Mayur] Preempt if unblocked thread has higher priority than current thread. */
   if (thread_current () != idle_thread && t->priority > thread_current ()->priority)
     {
       if (!intr_context ())
@@ -328,6 +331,7 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
+  /* [Mayur] Insert current thread into ready_list ordered by priority. */
   if (cur != idle_thread) 
     list_insert_ordered (&ready_list, &cur->elem, thread_cmp_priority, NULL);
   cur->status = THREAD_READY;
@@ -358,6 +362,7 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
 
+  /* [Mayur] Preempt if new priority is lower than highest ready thread. */
   if (!list_empty (&ready_list))
     {
       struct thread *front = list_entry (list_begin (&ready_list), struct thread, elem);
