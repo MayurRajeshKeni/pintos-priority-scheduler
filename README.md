@@ -11,20 +11,16 @@ This project implements a strict preemptive Priority Scheduler with nested Prior
 ## Architecture Diagram
 
 ```mermaid
-flowchart TD
-    NEW["New Thread"] -->|"thread_create()"| READY["Ready List\n(Ordered by Priority: Descending)"]
+graph TD
+    New[New Thread] -->|thread_create| Ready[Ready List<br/>Ordered by Priority: Descending]
     
-    READY -->|"next_thread_to_run()\n(Pop highest priority front)"| RUNNING["Running Thread\n(Executing on CPU)"]
+    Ready -->|next_thread_to_run<br/>Pop highest priority| Running[Running Thread<br/>Executing on CPU]
+    Running -->|thread_yield<br/>Preempted by higher priority| Ready
+    Running -->|thread_exit| Dead[Dying / Terminated]
     
-    RUNNING -->|"thread_yield()\n(Preempted by higher priority thread or priority lowered)"| READY
+    Running --->|lock_acquire / sema_down<br/>Resource unavailable| Blocked[Lock Wait-Queue<br/>Blocked State]
+    Blocked --->|lock_release / sema_up<br/>thread_unblock| Ready
     
-    RUNNING -->|"lock_acquire() / sema_down()\n(Resource unavailable)"| BLOCKED["Lock Wait-Queue\n(Blocked State)"]
-    
-    BLOCKED -->|"lock_release() / sema_up()\n(thread_unblock)"| READY
-    
-    BLOCKED -.->|"Priority Inversion Detected\n(Waiter priority > Holder priority)"| DONATION["Priority Donation\n(Propagates nested to current lock holder)"]
-    
-    DONATION -.->|"Boosts Effective Priority"| RUNNING
-    
-    RUNNING -->|"thread_exit()"| DYING["Dying / Terminated"]
+    Blocked -.->|Priority Inversion Detected<br/>Waiter > Holder| Donation[Priority Donation<br/>Propagates to lock holder]
+    Donation -.->|Boosts Effective Priority| Running
 ```
