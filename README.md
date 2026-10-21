@@ -11,34 +11,20 @@ This project implements a strict preemptive Priority Scheduler with nested Prior
 ## Architecture Diagram
 
 ```mermaid
-stateDiagram-v2
-    [*] --> READY: thread_create() / thread_unblock()<br/>(Ordered insertion by priority into Ready List)
-
-    READY --> RUNNING: schedule() / next_thread_to_run()<br/>(Front of Ready List: Highest Priority)
-
-    RUNNING --> READY: thread_yield()<br/>(Preempted by higher priority thread or priority lowered)
-
-    RUNNING --> BLOCKED: lock_acquire() / sema_down()<br/>(Resource unavailable; enqueued in Lock Wait-Queue)
-
-    BLOCKED --> READY: lock_release() / sema_up()<br/>(Unblocked & re-inserted into Ready List by priority)
-
-    RUNNING --> DYING: thread_exit()
-    DYING --> [*]
-
-    state RUNNING {
-        [*] --> Executing
-        Executing --> CheckPreemption: Priority lowered or Higher-priority thread unblocked
-        CheckPreemption --> Executing: Still highest priority
-    }
-
-    state BLOCKED {
-        [*] --> LockWaitQueue
-        LockWaitQueue --> DonatePriority: High-priority thread requests held lock
-        DonatePriority --> LockWaitQueue: Priority propagated to lock holder (nested)
-    }
+flowchart TD
+    NEW["New Thread"] -->|"thread_create()"| READY["Ready List\n(Ordered by Priority: Descending)"]
+    
+    READY -->|"next_thread_to_run()\n(Pop highest priority front)"| RUNNING["Running Thread\n(Executing on CPU)"]
+    
+    RUNNING -->|"thread_yield()\n(Preempted by higher priority thread or priority lowered)"| READY
+    
+    RUNNING -->|"lock_acquire() / sema_down()\n(Resource unavailable)"| BLOCKED["Lock Wait-Queue\n(Blocked State)"]
+    
+    BLOCKED -->|"lock_release() / sema_up()\n(thread_unblock)"| READY
+    
+    BLOCKED -.->|"Priority Inversion Detected\n(Waiter priority > Holder priority)"| DONATION["Priority Donation\n(Propagates nested to current lock holder)"]
+    
+    DONATION -.->|"Boosts Effective Priority"| RUNNING
+    
+    RUNNING -->|"thread_exit()"| DYING["Dying / Terminated"]
 ```
-
-## Baseline Verification
-The unmodified baseline Pintos kernel successfully compiles and boots on the x86 simulator (QEMU), passing baseline timer/alarm checks:
-
-![Baseline Boot](baseline_boot.jpg)
