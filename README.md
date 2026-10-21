@@ -11,31 +11,38 @@ This project implements a strict preemptive Priority Scheduler with nested Prior
 ## Architecture Diagram
 
 ```mermaid
-%%{init: {"flowchart": {"curve": "step"}}}%%
+%%{init: {"flowchart": {"curve": "linear"}}}%%
 flowchart TD
     %% Custom Styles
     classDef default fill:#1f2937,stroke:#3b82f6,stroke-width:2px,color:#f9fafb;
-    classDef special fill:#374151,stroke:#9ca3af,stroke-width:2px,color:#f3f4f6,stroke-dasharray: 5 5;
+    classDef donation fill:#374151,stroke:#9ca3af,stroke-width:2px,color:#f3f4f6,stroke-dasharray: 5 5;
+    classDef legend fill:#111827,stroke:#4b5563,stroke-width:1px,color:#9ca3af;
 
-    %% Nodes with distinct shapes
+    %% Nodes
     New([New Thread])
     Ready[[Ready List<br/>Ordered by Priority: Descending]]
     Running((Running Thread<br/>Executing on CPU))
     Blocked[(Lock Wait-Queue<br/>Blocked State)]
     Dead([Dying / Terminated])
-    Donation{{Priority Donation<br/>Propagates to lock holder}}:::special
+    Donation{{Priority Donation<br/>Propagates to lock holder}}:::donation
 
-    %% Execution Flow
-    New -- "thread_create()" --> Ready
-    Ready -- "next_thread_to_run()<br/>Pop highest priority" --> Running
-    Running -- "thread_yield()<br/>Preempted by higher priority" --> Ready
-    Running -- "thread_exit()" --> Dead
+    %% Execution & Preemption Transitions (Solid)
+    New -->|"thread_create()"| Ready
+    Ready -->|"next_thread_to_run()<br/>Dispatch highest priority"| Running
+    Running -->|"thread_yield()<br/>Preempted"| Ready
+    Running -->|"thread_exit()"| Dead
     
-    %% Synchronization Flow
-    Running -- "lock_acquire() / sema_down()<br/>Resource unavailable" --> Blocked
-    Blocked -- "lock_release() / sema_up()<br/>thread_unblock" --> Ready
+    %% Synchronization Transitions (Solid)
+    Running --->|"lock_acquire()<br/>Resource busy"| Blocked
+    Blocked --->|"lock_release()<br/>thread_unblock"| Ready
     
-    %% Priority Donation Flow
-    Blocked -. "Priority Inversion Detected<br/>Waiter > Holder" .-> Donation
-    Donation -. "Boosts Effective Priority" .-> Running
+    %% Priority Donation Flow (Dashed)
+    Blocked -.->|"Priority Inversion<br/>Waiter > Holder"| Donation
+    Donation -.->|"Boosts Effective Priority"| Running
+
+    %% Legend
+    subgraph Legend ["Diagram Legend"]
+        L1["Solid Arrow (──>) : Thread State Transition / Execution Flow"]:::legend
+        L2["Dashed Arrow (- - >) : Priority Donation / Priority Boost Propagation"]:::legend
+    end
 ```
