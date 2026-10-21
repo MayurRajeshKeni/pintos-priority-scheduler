@@ -80,6 +80,9 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+struct lock;   /* forward declaration */
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -88,6 +91,9 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int base_priority;              /* Priority without donations. */
+   struct lock *lock_waiting_on;   /* Lock this thread is blocked on, or NULL. */
+   struct list locks_held;         /* Locks this thread currently holds. */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -140,5 +146,8 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void thread_update_priority (struct thread *);
+void thread_set_effective_priority (struct thread *, int);
 
 #endif /* threads/thread.h */
