@@ -190,48 +190,54 @@ lock_init (struct lock *lock)
   sema_init (&lock->semaphore, 1);
 }
 
-/* Acquires LOCK, sleeping until it becomes available if
-   necessary.  The lock must not already be held by the current
-   thread.
-
-   This function may sleep, so it must not be called within an
-   interrupt handler.  This function may be called with
-   interrupts disabled, but interrupts will be turned back on if
-   we need to sleep. */
+/* Acquires LOCK, sleeping until it becomes available if necessary.
+   Handles single and nested priority donation by recursively traversing 
+   lock_waiting_on pointers. */
 void
 lock_acquire (struct lock *lock)
 {
   struct thread *cur = thread_current ();
   enum intr_level old;
+
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
   old = intr_disable ();
+
+  /* Priority Donation Traversal (Single & Nested) */
   if (lock->holder != NULL)
     {
+      cur->lock_waiting_on = lock;
       struct thread *t = cur;
       struct lock *l = lock;
       int depth = 0;
-      cur->lock_waiting_on = lock;
+
+      /* Cascade priority up the chain of waiting locks */
       while (l != NULL && l->holder != NULL && depth < 8)
         {
           if (l->holder->priority >= t->priority)
             break;
+
           thread_set_effective_priority (l->holder, t->priority);
           t = l->holder;
           l = t->lock_waiting_on;
           depth++;
         }
     }
+
   intr_set_level (old);
 
+  /* Block on the lock semaphore */
   sema_down (&lock->semaphore);
 
   old = intr_disable ();
+
+  /* Successfully acquired the lock */
   cur->lock_waiting_on = NULL;
   lock->holder = cur;
   list_push_back (&cur->locks_held, &lock->elem);
+
   intr_set_level (old);
 }
 
@@ -259,23 +265,27 @@ lock_try_acquire (struct lock *lock)
 }
 
 /* Releases LOCK, which must be owned by the current thread.
-
-   An interrupt handler cannot acquire a lock, so it does not
-   make sense to try to release a lock within an interrupt
-   handler. */
+   Restores priority by removing the lock from locks_held and recalculating priority. */
 void
 lock_release (struct lock *lock)
 {
   enum intr_level old;
+
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
   old = intr_disable ();
+
+  /* Detach lock from holder and remove from current thread's locks_held list */
   lock->holder = NULL;
   list_remove (&lock->elem);
+
+  /* Recalculate current thread's priority from base priority and remaining held locks */
   thread_update_priority (thread_current ());
+
   intr_set_level (old);
 
+  /* Wake up the highest-priority thread waiting on the lock */
   sema_up (&lock->semaphore);
 }
 

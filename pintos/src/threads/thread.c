@@ -355,12 +355,14 @@ thread_foreach (thread_action_func *func, void *aux)
       func (t, aux);
     }
 }
-/* Recompute T's priority from its base priority and the waiters on the locks it holds. */
+/* Recompute T's priority from its base priority and the highest priority 
+   waiter across all locks currently held by T. */
 void
 thread_update_priority (struct thread *t)
 {
   int p = t->base_priority;
   struct list_elem *e, *w;
+
   for (e = list_begin (&t->locks_held); e != list_end (&t->locks_held); e = list_next (e))
     {
       struct lock *l = list_entry (e, struct lock, elem);
