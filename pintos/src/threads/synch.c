@@ -105,6 +105,7 @@ sema_try_down (struct semaphore *sema)
    and wakes up one thread of those waiting for SEMA, if any.
 
    This function may be called from an interrupt handler. */
+/* [Nitin] Compares two semaphore waiters to sort them by priority. */
 static bool
 sema_waiter_cmp (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
@@ -122,6 +123,7 @@ sema_up (struct semaphore *sema)
   sema->value++;                               /* moved up: before unblock */
   if (!list_empty (&sema->waiters))
     {
+      /* [Nitin] Sort waiters by priority so highest-priority waiter wakes up first. */
       list_sort (&sema->waiters, sema_waiter_cmp, NULL);
       thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                   struct thread, elem));
@@ -190,7 +192,7 @@ lock_init (struct lock *lock)
   sema_init (&lock->semaphore, 1);
 }
 
-/* Acquires LOCK, sleeping until it becomes available if necessary.
+/* [Hari Prannav] Acquires LOCK, sleeping until it becomes available if necessary.
    Handles single and nested priority donation by recursively traversing 
    lock_waiting_on pointers. */
 void
@@ -205,7 +207,7 @@ lock_acquire (struct lock *lock)
 
   old = intr_disable ();
 
-  /* Priority Donation Traversal (Single & Nested) */
+  /* [Hari Prannav] Priority Donation Traversal (Single & Nested) */
   if (lock->holder != NULL)
     {
       cur->lock_waiting_on = lock;
@@ -213,7 +215,7 @@ lock_acquire (struct lock *lock)
       struct lock *l = lock;
       int depth = 0;
 
-      /* Cascade priority up the chain of waiting locks */
+      /* [Hari Prannav] Cascade priority up the chain of waiting locks */
       while (l != NULL && l->holder != NULL && depth < 8)
         {
           if (l->holder->priority >= t->priority)
@@ -233,7 +235,7 @@ lock_acquire (struct lock *lock)
 
   old = intr_disable ();
 
-  /* Successfully acquired the lock */
+  /* [Hari Prannav / Nitin] Successfully acquired the lock; track holder and locks_held */
   cur->lock_waiting_on = NULL;
   lock->holder = cur;
   list_push_back (&cur->locks_held, &lock->elem);
@@ -258,13 +260,14 @@ lock_try_acquire (struct lock *lock)
   success = sema_try_down (&lock->semaphore);
   if (success)
     {
+      /* [Nitin] Track newly acquired lock in thread's locks_held list. */
       lock->holder = thread_current ();
       list_push_back (&thread_current ()->locks_held, &lock->elem);
     }
   return success;
 }
 
-/* Releases LOCK, which must be owned by the current thread.
+/* [Hari Prannav / Nitin] Releases LOCK, which must be owned by the current thread.
    Restores priority by removing the lock from locks_held and recalculating priority. */
 void
 lock_release (struct lock *lock)
@@ -276,11 +279,11 @@ lock_release (struct lock *lock)
 
   old = intr_disable ();
 
-  /* Detach lock from holder and remove from current thread's locks_held list */
+  /* [Hari Prannav] Detach lock from holder and remove from current thread's locks_held list */
   lock->holder = NULL;
   list_remove (&lock->elem);
 
-  /* Recalculate current thread's priority from base priority and remaining held locks */
+  /* [Nitin] Recalculate current thread's priority from base priority and remaining held locks */
   thread_update_priority (thread_current ());
 
   intr_set_level (old);
@@ -307,6 +310,7 @@ struct semaphore_elem
     struct semaphore semaphore;         /* This semaphore. */
   };
 
+/* [Nitin] Compares condition variable waiters by the highest priority of their waiting thread. */
 static bool
 cond_waiter_cmp (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
@@ -383,6 +387,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
 
     if (!list_empty (&cond->waiters))
     {
+      /* [Nitin] Sort condition waiters by priority so highest-priority waiter is signaled first. */
       list_sort (&cond->waiters, cond_waiter_cmp, NULL);
       sema_up (&list_entry (list_pop_front (&cond->waiters),
                             struct semaphore_elem, elem)->semaphore);

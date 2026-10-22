@@ -355,7 +355,7 @@ thread_foreach (thread_action_func *func, void *aux)
       func (t, aux);
     }
 }
-/* Recompute T's priority from its base priority and the highest priority 
+/* [Nitin] Recompute T's priority from its base priority and the highest priority 
    waiter across all locks currently held by T. */
 void
 thread_update_priority (struct thread *t)
@@ -376,7 +376,7 @@ thread_update_priority (struct thread *t)
   thread_set_effective_priority (t, p);
 }
 
-/* Set T's priority and keep ready_list sorted if T is in it. */
+/* [Nitin] Set T's priority and keep ready_list sorted if T is in it. */
 void
 thread_set_effective_priority (struct thread *t, int p)
 {
@@ -393,8 +393,10 @@ thread_set_priority (int new_priority)
 {
   enum intr_level old = intr_disable ();
   struct thread *cur = thread_current ();
+  /* [Nitin] Update base priority and recompute effective priority from held locks. */
   cur->base_priority = new_priority;
   thread_update_priority (cur);
+  /* [Mayur] Preempt if highest ready thread now has higher priority. */
   if (!list_empty (&ready_list) &&
       list_entry (list_begin (&ready_list), struct thread, elem)->priority > cur->priority)
     thread_yield ();
@@ -525,6 +527,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  /* [Nitin / Hari Prannav] Initialize base priority and lock tracking structures. */
   t->base_priority = priority;
   t->lock_waiting_on = NULL;
   list_init (&t->locks_held);

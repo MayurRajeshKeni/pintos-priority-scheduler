@@ -91,9 +91,12 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
-    int base_priority;              /* Priority without donations. */
-   struct lock *lock_waiting_on;   /* Lock this thread is blocked on, or NULL. */
-   struct list locks_held;         /* Locks this thread currently holds. */
+    /* [Nitin] Base priority tracking without donations. */
+    int base_priority;                  /* Priority without donations. */
+    /* [Hari Prannav] Lock this thread is blocked on, used for nested donation traversal. */
+    struct lock *lock_waiting_on;       /* Lock this thread is blocked on, or NULL. */
+    /* [Nitin] List of locks currently held by this thread for priority recomputation. */
+    struct list locks_held;             /* Locks this thread currently holds. */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -147,6 +150,7 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+/* [Nitin] Recalculate priority from held locks and set effective priority. */
 void thread_update_priority (struct thread *);
 void thread_set_effective_priority (struct thread *, int);
 
